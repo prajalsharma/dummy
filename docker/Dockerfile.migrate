@@ -1,0 +1,18 @@
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache libc6-compat openssl
+
+# Install dependencies
+FROM base AS deps
+COPY package.json ./
+COPY packages/database/package.json ./packages/database/
+RUN npm install --workspace=@risex/database
+
+# Copy schema
+FROM deps AS runner
+COPY packages/database/prisma ./packages/database/prisma
+COPY packages/database/src ./packages/database/src
+WORKDIR /app/packages/database
+RUN npx prisma generate
+
+CMD ["npx", "prisma", "migrate", "deploy"]

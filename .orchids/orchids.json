@@ -1,0 +1,8 @@
+{
+  "startupCommands": [
+    "docker compose -f docker-compose.dev.yml up -d; cd apps/web && npm install && npm run dev",
+    "cd apps/api-server && npm install && npm run dev"
+  ],
+  "projectId": "a245b74f-ee06-4b36-92f1-ada8d391cf4b",
+  "templateId": "any"
+}

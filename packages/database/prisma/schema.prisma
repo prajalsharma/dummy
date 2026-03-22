@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  referralCode String    @unique
+  referredById String?
+  referredBy   User?     @relation("Referrals", fields: [referredById], references: [id])
+  referrals    User[]    @relation("Referrals")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  telegramAccount TelegramAccount?
+  wallets         Wallet[]
+  orders          Order[]
+  positions       Position[]
+  leaderboard     LeaderboardEntry?
+  referralsSent   Referral[]        @relation("ReferrerUser")
+  referralsRecv   Referral[]        @relation("ReferredUser")
+
+  @@index([referralCode])
+}
+
+model TelegramAccount {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  telegramId       String   @unique
+  username         String?
+  firstName        String?
+  lastName         String?
+  chatId           String
+  isActive         Boolean  @default(true)
+  linkedAt         DateTime @default(now())
+  lastActiveAt     DateTime @default(now())
+
+  @@index([telegramId])
+}
+
+model Wallet {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  address        String   @unique
+  encryptedKey   String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  @@index([address])
+  @@index([userId])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  externalOrderId String?     @unique
+  market          String
+  side            OrderSide
+  type            OrderType
+  status          OrderStatus @default(PENDING)
+  marginUSDC      Decimal     @db.Decimal(20, 6)
+  leverage        Int
+  entryPrice      Decimal?    @db.Decimal(20, 6)
+  limitPrice      Decimal?    @db.Decimal(20, 6)
+  size            Decimal?    @db.Decimal(20, 8)
+  txHash          String?
+  errorMessage    String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  position Position?
+
+  @@index([userId])
+  @@index([market])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Position {
+  id               String      @id @default(uuid())
+  userId           String
+  user             User        @relation(fields: [userId], references: [id])
+  orderId          String      @unique
+  order            Order       @relation(fields: [orderId], references: [id])
+  externalPosId    String?
+  market           String
+  side             OrderSide
+  size             Decimal     @db.Decimal(20, 8)
+  entryPrice       Decimal     @db.Decimal(20, 6)
+  markPrice        Decimal?    @db.Decimal(20, 6)
+  marginUSDC       Decimal     @db.Decimal(20, 6)
+  leverage         Int
+  unrealizedPnl    Decimal?    @db.Decimal(20, 6)
+  realizedPnl      Decimal?    @db.Decimal(20, 6)
+  liquidationPrice Decimal?    @db.Decimal(20, 6)
+  takeProfitPrice  Decimal?    @db.Decimal(20, 6)
+  stopLossPrice    Decimal?    @db.Decimal(20, 6)
+  isOpen           Boolean     @default(true)
+  openedAt         DateTime    @default(now())
+  closedAt         DateTime?
+  updatedAt        DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([market])
+  @@index([isOpen])
+}
+
+model LeaderboardEntry {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  totalPnl     Decimal  @default(0) @db.Decimal(20, 6)
+  realizedPnl  Decimal  @default(0) @db.Decimal(20, 6)
+  tradeCount   Int      @default(0)
+  winCount     Int      @default(0)
+  lossCount    Int      @default(0)
+  winRate      Decimal  @default(0) @db.Decimal(5, 4)
+  volume       Decimal  @default(0) @db.Decimal(20, 6)
+  updatedAt    DateTime @updatedAt
+
+  @@index([totalPnl])
+}
+
+model Referral {
+  id           String   @id @default(uuid())
+  referrerId   String
+  referrer     User     @relation("ReferrerUser", fields: [referrerId], references: [id])
+  referredId   String
+  referred     User     @relation("ReferredUser", fields: [referredId], references: [id])
+  rewardUSDC   Decimal  @default(0) @db.Decimal(20, 6)
+  createdAt    DateTime @default(now())
+
+  @@unique([referrerId, referredId])
+}
+
+model MarketCache {
+  symbol       String   @id
+  baseAsset    String
+  quoteAsset   String
+  markPrice    Decimal  @db.Decimal(20, 6)
+  indexPrice   Decimal  @db.Decimal(20, 6)
+  fundingRate  Decimal  @db.Decimal(10, 8)
+  openInterest Decimal  @db.Decimal(20, 6)
+  volume24h    Decimal  @db.Decimal(20, 6)
+  change24h    Decimal  @db.Decimal(10, 6)
+  maxLeverage  Int
+  updatedAt    DateTime @updatedAt
+}
+
+enum OrderSide {
+  LONG
+  SHORT
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+}
+
+enum OrderStatus {
+  PENDING
+  OPEN
+  FILLED
+  CANCELLED
+  FAILED
+}
