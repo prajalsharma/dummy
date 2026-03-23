@@ -1,0 +1,32 @@
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache libc6-compat openssl
+
+# Install dependencies
+FROM base AS deps
+COPY package.json package-lock.json* ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/database/package.json ./packages/database/
+COPY apps/bot/package.json ./apps/bot/
+RUN npm ci --workspace=@risex/shared --workspace=@risex/database --workspace=@risex/bot || \
+    npm install --workspace=@risex/shared --workspace=@risex/database --workspace=@risex/bot
+
+# Build
+FROM deps AS builder
+COPY packages/shared/ ./packages/shared/
+COPY packages/database/ ./packages/database/
+COPY apps/bot/ ./apps/bot/
+RUN cd packages/database && npx prisma generate
+RUN npx turbo run build --filter=@risex/bot
+
+# Runtime
+FROM node:20-alpine AS runner
+WORKDIR /app
+RUN apk add --no-cache openssl
+ENV NODE_ENV=production
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/packages/database/dist ./packages/database/dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/bot/dist ./apps/bot/dist
+USER node
+CMD ["node", "apps/bot/dist/index.js"]
