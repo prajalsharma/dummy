@@ -1,0 +1,28 @@
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache libc6-compat openssl
+
+FROM base AS deps
+COPY package.json package-lock.json* ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/database/package.json ./packages/database/
+COPY apps/api-server/package.json ./apps/api-server/
+RUN npm ci --workspace=@risex/shared --workspace=@risex/database --workspace=@risex/api-server || \
+    npm install --workspace=@risex/shared --workspace=@risex/database --workspace=@risex/api-server
+
+FROM deps AS builder
+COPY packages/shared/ ./packages/shared/
+COPY packages/database/ ./packages/database/
+COPY apps/api-server/ ./apps/api-server/
+RUN cd packages/database && npx prisma generate
+RUN npx turbo run build --filter=@risex/api-server
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+RUN apk add --no-cache openssl
+ENV NODE_ENV=production
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/api-server/dist ./apps/api-server/dist
+EXPOSE 4000
+USER node
+CMD ["node", "apps/api-server/dist/index.js"]

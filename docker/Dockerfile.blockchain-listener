@@ -1,0 +1,27 @@
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache libc6-compat openssl
+
+FROM base AS deps
+COPY package.json package-lock.json* ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/database/package.json ./packages/database/
+COPY apps/blockchain-listener/package.json ./apps/blockchain-listener/
+RUN npm ci --workspace=@risex/shared --workspace=@risex/database --workspace=@risex/blockchain-listener || \
+    npm install --workspace=@risex/shared --workspace=@risex/database --workspace=@risex/blockchain-listener
+
+FROM deps AS builder
+COPY packages/shared/ ./packages/shared/
+COPY packages/database/ ./packages/database/
+COPY apps/blockchain-listener/ ./apps/blockchain-listener/
+RUN cd packages/database && npx prisma generate
+RUN npx turbo run build --filter=@risex/blockchain-listener
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+RUN apk add --no-cache openssl
+ENV NODE_ENV=production
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/blockchain-listener/dist ./apps/blockchain-listener/dist
+USER node
+CMD ["node", "apps/blockchain-listener/dist/index.js"]
